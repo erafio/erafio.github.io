@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.2.2">Jekyll</generator><link href="https://erafio.github.io/erafio.github.io/feed.xml" rel="self" type="application/atom+xml" /><link href="https://erafio.github.io/erafio.github.io/" rel="alternate" type="text/html" /><updated>2022-07-15T07:46:34+07:00</updated><id>https://erafio.github.io/erafio.github.io/feed.xml</id><title type="html">erafio’s note</title><subtitle>Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.</subtitle><entry><title type="html">Create Solana Validator RPC Only Node</title><link href="https://erafio.github.io/erafio.github.io/solana/2022/07/15/create-solana-validator-rpc-only-node.html" rel="alternate" type="text/html" title="Create Solana Validator RPC Only Node" /><published>2022-07-15T06:58:15+07:00</published><updated>2022-07-15T06:58:15+07:00</updated><id>https://erafio.github.io/erafio.github.io/solana/2022/07/15/create-solana-validator-rpc-only-node</id><content type="html" xml:base="https://erafio.github.io/erafio.github.io/solana/2022/07/15/create-solana-validator-rpc-only-node.html"><![CDATA[<h1 id="disk-setup">Disk Setup</h1>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="go">mkdir -p /solana/{ledger,account,spare}</span></code></pre></figure>
+
+<p>Check if the directory is okay by running the ls command on <code class="language-plaintext highlighter-rouge">/solana/</code> directory. Also, make sure all the directories read, write and access permissions is okay by running the chmod on the created directories.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="go">chmod a+w /solana/ledger
+chmod a+w /solana/account
+chmod a+w /solana/spare</span></code></pre></figure>
+
+<h1 id="setup-the-solana-validator">Setup the Solana Validator</h1>
+
+<p>Before you start, make sure you install the solana cli first which you can find the information on how to install the latest package <a href="https://docs.solana.com/cli/install-solana-cli-tools">here</a>. Reboot your computer to make sure everything is going okay.</p>
+
+<p>On this config we will connect directly as a validator (non-voting) for Solana mainnet-beta. First configure the Solana tools that you installed.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="go">solana config set --url https://api.mainnet-beta.solana.com</span></code></pre></figure>
+
+<p>Then run the sys-tuner for one time, this is to configure your computers internals to the recommended setup.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">$</span><span class="o">(</span><span class="nb">command</span> <span class="nt">-v</span> solana-sys-tuner<span class="o">)</span> <span class="nt">--user</span> <span class="si">$(</span><span class="nb">whoami</span><span class="si">)</span> <span class="o">&gt;</span> sys-tuner.log 2&gt;&amp;1 &amp;</code></pre></figure>
+
+<p>This will run one-time, you need to run it after you reboot your system. There is also another way, on which you need to configure a <code class="language-plaintext highlighter-rouge">systemd</code> service. To configure a <code class="language-plaintext highlighter-rouge">systemd</code> service, create a file named <code class="language-plaintext highlighter-rouge">solana-sys-tuner.service</code> in the directory <code class="language-plaintext highlighter-rouge">/etc/systemd/system</code>.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">cat &gt;</span><span class="w"> </span>/etc/systemd/system/solana-sys-tuner.service <span class="o">&lt;&lt;</span> <span class="no">EOF</span><span class="sh">
+</span><span class="go">[Unit]
+Description=Solana System Tuner
+After=network.target
+Before=sol.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+ExecStart=/root/solana-sys-tuner.sh
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=sol.service
+EOF</span></code></pre></figure>
+
+<p>This will create the service and now you can run <code class="language-plaintext highlighter-rouge">systemctl enable --now solana-sys-tuner.service</code> to enable it at boot and start the service right now. You can also do the manual way without having to run the <code class="language-plaintext highlighter-rouge">solana-sys-tuner</code> binary, just follow this tutorial from the official documentation <a href="https://docs.solana.com/running-validator/validator-start#manual">here</a>.
+Also don’t forget to create the <code class="language-plaintext highlighter-rouge">solana-sys-tuner.sh</code> on your user home root directory.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">cat &gt;</span><span class="w"> </span>~/solana-sys-tuner.sh <span class="o">&lt;&lt;</span> <span class="no">EOF</span><span class="sh">
+</span><span class="gp">#</span><span class="sh">!/usr/bin/env bash
+</span><span class="go">set -ex
+
+exec /root/.local/share/solana/install/active_release/bin/solana-sys-tuner --user root
+EOF</span></code></pre></figure>
+
+<p>Now you can now start the validator, to start prepare first a validator keypair.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="go">solana-keygen new -o ~/validator-keypair.json</span></code></pre></figure>
+
+<p>This will create a validator keypair at your user home directory. Don’t forget to save the output generated BIP39 seedphrase. <strong>DON’T FORGET</strong>. Once done, if you forgot your public key, you can view it using the command <code class="language-plaintext highlighter-rouge">solana-keygen pubkey ~/validator-keypair.json</code>. You will need the public key for later commands.</p>
+
+<p>Set the validator keypair in your Solana cli tool:</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="go">solana config set --keypair ~/validator-keypair.json</span></code></pre></figure>
+
+<p>That’s all for configuration, we can now start the validator. Create an simple shell script to contain the run parameters of the <code class="language-plaintext highlighter-rouge">solana-validator</code> command, so it will be easier to modify and adjust later on.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">cat &gt;</span><span class="w"> </span>validator.sh <span class="o">&lt;&lt;</span> <span class="no">EOF</span><span class="sh">
+</span><span class="gp">#</span><span class="sh">!/usr/bin/env bash
+</span><span class="go">
+set -e
+
+exec solana-validator \
+    --no-voting \
+    --identity ~/validator-keypair.json \
+    --known-validator 7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2 \
+    --known-validator GdnSyH3YtwcxFvQrVVJMm1JhTS4QVX7MFsX56uJLUfiZ \
+    --known-validator DE1bawNcRJB9rVm3buyMVfr8mBEoyyu73NBovf2oXJsJ \
+    --known-validator CakcnaRDHka2gXyfbEd2d3xsvkJkqsLw2akB3zsN1D2S \
+    --only-known-rpc \
+    --ledger /solana/ledger \
+    --accounts /solana/account \
+    --rpc-port 8899 \
+    --rpc-bind-address 0.0.0.0 \
+    --dynamic-port-range 8000-8100 \
+    --entrypoint entrypoint.mainnet-beta.solana.com:8001 \
+    --entrypoint entrypoint2.mainnet-beta.solana.com:8001 \
+    --entrypoint entrypoint3.mainnet-beta.solana.com:8001 \
+    --entrypoint entrypoint4.mainnet-beta.solana.com:8001 \
+    --entrypoint entrypoint5.mainnet-beta.solana.com:8001 \
+    --expected-genesis-hash 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d \
+    --wal-recovery-mode skip_any_corrupted_record \
+    --limit-ledger-size \
+    --no-port-check \
+    --enable-rpc-transaction-history \
+    --full-rpc-api \
+    --log /solana/spare/logs/solana-validator.log
+EOF</span></code></pre></figure>
+
+<p>This validator flags specify that RPC is open to public, and its only rpc-mode due to the <code class="language-plaintext highlighter-rouge">--no-voting flag</code>. The flags also specify that the RPC transaction history is enabled which will make the ledger disk be big, check the flag <code class="language-plaintext highlighter-rouge">--enable-rpc-transaction-history</code>. Read every flags from the <code class="language-plaintext highlighter-rouge">solana-validator</code> binary by executing the <code class="language-plaintext highlighter-rouge">--help</code> flag.</p>
+
+<p>Wait for a while, it will download a very big snapshot so you could catch up at the latest transactions. The ledger will only contain all the latest transaction history of the Solana chain. This will take time depending on the speed of your machine and speed of network. Once you see there are no percentage or anything, then its good to go.</p>
+
+<p>Make sure its on the list of validator nodes using the solana gossip command.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">solana gossip | grep &lt;pubkey&gt;</span></code></pre></figure>
+
+<p>That’s all, now you’re part of the validators. Another thing, in order to run it on reboot add the <code class="language-plaintext highlighter-rouge">systemd</code> service file, create the file using the command below on same directory as the <code class="language-plaintext highlighter-rouge">solana-sys-tuner.service</code>.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">cat &gt;</span><span class="w"> </span>/etc/systemd/system/sol.service <span class="o">&lt;&lt;</span> <span class="no">EOF</span><span class="sh">
+</span><span class="go">[Unit]
+Description=Solana Validator
+After=network.target
+Wants=solana-sys-tuner.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+LimitNOFILE=1000000
+LogRateLimitIntervalSec=0
+Environment="PATH=/bin:/usr/bin:/root/.local/share/solana/install/active_release/bin"
+ExecStart=/root/validator.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF</span></code></pre></figure>
+
+<p>Then enable it at boot using the command <code class="language-plaintext highlighter-rouge">systemctl enable --now sol.service</code>. Make sure that it doesn’t have errors by checking the service status. Last thing to mention regarding logs as it can become large quickly, make sure to create a logrotate rule, the command below which I grabbed from the official documentation.</p>
+
+<figure class="highlight"><pre><code class="language-terminal" data-lang="terminal"><span class="gp">cat &gt;</span><span class="w"> </span>logrotate.sol <span class="o">&lt;&lt;</span><span class="no">EOF</span><span class="sh">
+</span><span class="go">/root/solana-validator.log {
+  rotate 7
+  daily
+  missingok
+  postrotate
+    systemctl kill -s USR1 sol.service
+  endscript
+}
+EOF
+
+sudo cp logrotate.sol /etc/logrotate.d/sol
+systemctl restart logrotate.service</span></code></pre></figure>
+
+<p>That’s all, reboot and celebrate 🎉! Don’t forget to share and leave a comment if you like this kind of articles.</p>]]></content><author><name></name></author><category term="solana" /><summary type="html"><![CDATA[Disk Setup]]></summary></entry><entry><title type="html">Welcome to Jekyll!</title><link href="https://erafio.github.io/erafio.github.io/jekyll/update/2022/07/15/welcome-to-jekyll.html" rel="alternate" type="text/html" title="Welcome to Jekyll!" /><published>2022-07-15T06:58:15+07:00</published><updated>2022-07-15T06:58:15+07:00</updated><id>https://erafio.github.io/erafio.github.io/jekyll/update/2022/07/15/welcome-to-jekyll</id><content type="html" xml:base="https://erafio.github.io/erafio.github.io/jekyll/update/2022/07/15/welcome-to-jekyll.html"><![CDATA[<p>You’ll find this post in your <code class="language-plaintext highlighter-rouge">_posts</code> directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run <code class="language-plaintext highlighter-rouge">jekyll serve</code>, which launches a web server and auto-regenerates your site when a file is updated.</p>
+
+<p>Jekyll requires blog post files to be named according to the following format:</p>
+
+<p><code class="language-plaintext highlighter-rouge">YEAR-MONTH-DAY-title.MARKUP</code></p>
+
+<p>Where <code class="language-plaintext highlighter-rouge">YEAR</code> is a four-digit number, <code class="language-plaintext highlighter-rouge">MONTH</code> and <code class="language-plaintext highlighter-rouge">DAY</code> are both two-digit numbers, and <code class="language-plaintext highlighter-rouge">MARKUP</code> is the file extension representing the format used in the file. After that, include the necessary front matter. Take a look at the source for this post to get an idea about how it works.</p>
+
+<p>Jekyll also offers powerful support for code snippets:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="k">def</span> <span class="nf">print_hi</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span>
+  <span class="nb">puts</span> <span class="s2">"Hi, </span><span class="si">#{</span><span class="nb">name</span><span class="si">}</span><span class="s2">"</span>
+<span class="k">end</span>
+<span class="n">print_hi</span><span class="p">(</span><span class="s1">'Tom'</span><span class="p">)</span>
+<span class="c1">#=&gt; prints 'Hi, Tom' to STDOUT.</span></code></pre></figure>
+
+<p>Check out the <a href="https://jekyllrb.com/docs/home">Jekyll docs</a> for more info on how to get the most out of Jekyll. File all bugs/feature requests at <a href="https://github.com/jekyll/jekyll">Jekyll’s GitHub repo</a>. If you have questions, you can ask them on <a href="https://talk.jekyllrb.com/">Jekyll Talk</a>.</p>]]></content><author><name></name></author><category term="jekyll" /><category term="update" /><summary type="html"><![CDATA[You’ll find this post in your _posts directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run jekyll serve, which launches a web server and auto-regenerates your site when a file is updated.]]></summary></entry></feed>
